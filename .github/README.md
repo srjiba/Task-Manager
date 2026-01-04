@@ -1,4 +1,3 @@
-(The file `/Users/sami/DEV/VS Code/Task Manager/.github/README.md` exists, but is empty)
 # Task Manager
 
 A professional, accessible Task Manager web application built with HTML5, CSS3, JavaScript (ES6+) and Bootstrap 5.
