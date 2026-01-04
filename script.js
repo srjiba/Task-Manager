@@ -1,519 +1,289 @@
-// ===========================
-// Task Manager Application
-// ===========================
+// Task Manager - Bootstrap 5 + Vanilla JS
+// Features: CRUD, localStorage persistence, search, filters, priority, category, due date, validation
 
 class TaskManager {
-    constructor() {
-        this.tasks = this.loadTasks();
-        this.currentFilter = 'all';
-        this.initializeElements();
-        this.initializeDarkMode();
-        this.attachEventListeners();
-        this.render();
+  constructor() {
+    this.storageKey = 'tasks_v1';
+    this.tasks = this.loadTasks();
+    this.modalEl = document.getElementById('taskModal');
+    this.bsModal = new bootstrap.Modal(this.modalEl);
+    this.form = document.getElementById('taskForm');
+    this.searchInput = document.getElementById('searchInput');
+    this.tasksContainer = document.getElementById('tasksContainer');
+    this.emptyState = document.getElementById('emptyState');
+    this.clearCompletedBtn = document.getElementById('clearCompletedBtn');
+    this.filterStatus = document.getElementById('filterStatus');
+    this.filterPriority = document.getElementById('filterPriority');
+    this.filterCategory = document.getElementById('filterCategory');
+
+    // Form fields
+    this.inputId = document.getElementById('taskId');
+    this.inputTitle = document.getElementById('taskTitle');
+    this.inputDescription = document.getElementById('taskDescription');
+    this.inputPriority = document.getElementById('taskPriority');
+    this.inputDueDate = document.getElementById('taskDueDate');
+    this.inputCategory = document.getElementById('taskCategory');
+
+    this.bindEvents();
+    this.render();
+  }
+
+  bindEvents() {
+    // Save (create/update) task
+    this.form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.saveFromForm();
+    });
+
+    // Search
+    this.searchInput.addEventListener('input', () => this.render());
+
+    // Filters
+    this.filterStatus.addEventListener('change', () => this.render());
+    this.filterPriority.addEventListener('change', () => this.render());
+    this.filterCategory.addEventListener('change', () => this.render());
+
+    // Clear completed
+    this.clearCompletedBtn.addEventListener('click', () => this.clearCompleted());
+
+    // When modal opens for add, reset form
+    document.getElementById('addTaskBtn').addEventListener('click', () => this.openAddModal());
+  }
+
+  // Load/save
+  loadTasks() {
+    try { return JSON.parse(localStorage.getItem(this.storageKey)) || []; } catch (e) { return []; }
+  }
+  saveTasks() { localStorage.setItem(this.storageKey, JSON.stringify(this.tasks)); }
+
+  // Open modal for new task
+  openAddModal() {
+    this.form.classList.remove('was-validated');
+    this.inputId.value = '';
+    this.inputTitle.value = '';
+    this.inputDescription.value = '';
+    this.inputPriority.value = 'Medium';
+    this.inputDueDate.value = '';
+    this.inputCategory.value = '';
+    document.getElementById('taskModalLabel').textContent = 'Add Task';
+    this.bsModal.show();
+  }
+
+  // Open modal to edit task
+  openEditModal(id) {
+    const task = this.tasks.find(t => t.id === id);
+    if (!task) return;
+    this.form.classList.remove('was-validated');
+    this.inputId.value = task.id;
+    this.inputTitle.value = task.title;
+    this.inputDescription.value = task.description || '';
+    this.inputPriority.value = task.priority || 'Medium';
+    this.inputDueDate.value = task.dueDate ? task.dueDate.split('T')[0] : '';
+    this.inputCategory.value = task.category || '';
+    document.getElementById('taskModalLabel').textContent = 'Edit Task';
+    this.bsModal.show();
+  }
+
+  // Save task from modal form (create or update)
+  saveFromForm() {
+    this.form.classList.add('was-validated');
+    if (!this.form.checkValidity()) return;
+
+    const id = this.inputId.value ? Number(this.inputId.value) : Date.now();
+    const task = {
+      id,
+      title: this.inputTitle.value.trim(),
+      description: this.inputDescription.value.trim(),
+      priority: this.inputPriority.value,
+      dueDate: this.inputDueDate.value ? new Date(this.inputDueDate.value).toISOString() : null,
+      category: this.inputCategory.value.trim() || 'General',
+      completed: false,
+      createdAt: this.inputId.value ? (this.tasks.find(t=>t.id===id)?.createdAt || new Date().toISOString()) : new Date().toISOString()
+    };
+
+    const existsIndex = this.tasks.findIndex(t => t.id === id);
+    if (existsIndex > -1) {
+      // Preserve completed state if present
+      task.completed = this.tasks[existsIndex].completed;
+      this.tasks[existsIndex] = task;
+    } else {
+      this.tasks.push(task);
     }
 
-    // ===========================
-    // DOM Elements
-    // ===========================
+    this.saveTasks();
+    this.populateCategoryFilter();
+    this.bsModal.hide();
+    this.render();
+  }
 
-    initializeElements() {
-        this.form = document.getElementById('taskForm');
-        this.input = document.getElementById('taskInput');
-        this.prioritySelect = document.getElementById('prioritySelect');
-        this.searchInput = document.getElementById('searchInput');
-        this.taskList = document.getElementById('taskList');
-        this.emptyState = document.getElementById('emptyState');
-        this.clearCompletedBtn = document.getElementById('clearCompletedBtn');
-        this.formError = document.getElementById('formError');
-        this.totalCount = document.getElementById('totalCount');
-        this.completedCount = document.getElementById('completedCount');
-        this.pendingCount = document.getElementById('pendingCount');
-        this.filterButtons = document.querySelectorAll('.btn-filter');
-        this.darkModeToggle = document.getElementById('darkModeToggle');
+  // Toggle completion
+  toggleComplete(id) {
+    const t = this.tasks.find(x => x.id === id);
+    if (!t) return;
+    t.completed = !t.completed;
+    this.saveTasks();
+    this.render();
+  }
+
+  // Delete
+  deleteTask(id) {
+    if (!confirm('Delete this task?')) return;
+    this.tasks = this.tasks.filter(t => t.id !== id);
+    this.saveTasks();
+    this.populateCategoryFilter();
+    this.render();
+  }
+
+  // Clear completed
+  clearCompleted() {
+    if (!confirm('Clear all completed tasks?')) return;
+    this.tasks = this.tasks.filter(t => !t.completed);
+    this.saveTasks();
+    this.render();
+  }
+
+  // Filtering & searching
+  applyFilters(tasks) {
+    const q = this.searchInput.value.trim().toLowerCase();
+    const status = this.filterStatus.value;
+    const priority = this.filterPriority.value;
+    const category = this.filterCategory.value;
+
+    return tasks.filter(t => {
+      if (status === 'pending' && t.completed) return false;
+      if (status === 'completed' && !t.completed) return false;
+      if (priority !== 'all' && t.priority !== priority) return false;
+      if (category !== 'all' && t.category !== category) return false;
+      if (q) {
+        const hay = (t.title + ' ' + (t.description||'') + ' ' + (t.category||'')).toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  // Render all
+  render() {
+    // Update stats
+    const total = this.tasks.length;
+    const completed = this.tasks.filter(t => t.completed).length;
+    const pending = total - completed;
+    document.getElementById('totalCount').textContent = total;
+    document.getElementById('completedCount').textContent = completed;
+    document.getElementById('pendingCount').textContent = pending;
+
+    // Populate filters
+    this.populateCategoryFilter();
+
+    // Render task cards
+    const toShow = this.applyFilters(this.tasks).sort((a,b)=> new Date(a.dueDate||a.createdAt) - new Date(b.dueDate||b.createdAt));
+    this.tasksContainer.innerHTML = '';
+
+    if (toShow.length === 0) {
+      this.emptyState.style.display = total === 0 ? 'block' : 'block';
+      this.tasksContainer.innerHTML = '';
+      return;
     }
 
-    // ===========================
-    // Event Listeners
-    // ===========================
-
-    attachEventListeners() {
-        // Form submission
-        this.form.addEventListener('submit', (e) => this.handleAddTask(e));
-
-        // Filter buttons
-        this.filterButtons.forEach((btn) => {
-            btn.addEventListener('click', (e) => this.handleFilter(e));
-        });
-
-        // Clear completed button
-        this.clearCompletedBtn.addEventListener('click', () => this.clearCompleted());
-
-        // Input validation
-        this.input.addEventListener('input', () => this.clearError());
-
-        // Dark mode toggle
-        this.darkModeToggle.addEventListener('click', () => this.toggleDarkMode());
-
-        // Use event delegation for task list actions
-        this.taskList.addEventListener('click', (e) => this.handleListClick(e));
-        this.taskList.addEventListener('change', (e) => this.handleListChange(e));
-
-        // Search input
-        if (this.searchInput) {
-            this.searchInput.addEventListener('input', () => this.render());
-        }
-    }
-
-    // ===========================
-    // Task Management
-    // ===========================
-
-    /**
-     * Add a new task
-     */
-    handleAddTask(e) {
-        e.preventDefault();
-        const taskText = this.input.value.trim();
-        const priority = this.prioritySelect ? this.prioritySelect.value : 'medium';
-
-        // Validation
-        if (!taskText) {
-            this.showError('Please enter a task');
-            return;
-        }
-
-        if (taskText.length > 200) {
-            this.showError('Task must be less than 200 characters');
-            return;
-        }
-
-        // Create task object
-        const task = {
-            id: Date.now(),
-            text: taskText,
-            completed: false,
-            priority: priority,
-            createdAt: new Date(),
-        };
-
-        this.tasks.push(task);
-        this.saveTasks();
-        this.input.value = '';
-        this.input.focus();
-        this.render();
-
-        // Announce to screen readers
-        this.announceToScreenReader(`Task "${taskText}" added`);
-    }
-
-    /**
-     * Delete a task
-     */
-    deleteTask(id) {
-        this.tasks = this.tasks.filter((task) => task.id !== id);
-        this.saveTasks();
-        this.render();
-        this.announceToScreenReader('Task deleted');
-    }
-
-    /**
-     * Toggle task completion
-     */
-    toggleTask(id) {
-        const task = this.tasks.find((t) => t.id === id);
-        if (task) {
-            task.completed = !task.completed;
-            this.saveTasks();
-            this.render();
-            const status = task.completed ? 'completed' : 'incomplete';
-            this.announceToScreenReader(`Task marked as ${status}`);
-        }
-    }
-
-    /**
-     * Clear all completed tasks
-     */
-    clearCompleted() {
-        const initialCount = this.tasks.length;
-        this.tasks = this.tasks.filter((task) => !task.completed);
-        const clearedCount = initialCount - this.tasks.length;
-        this.saveTasks();
-        this.render();
-        this.announceToScreenReader(`${clearedCount} completed task(s) deleted`);
-    }
-
-    // ===========================
-    // Filtering
-    // ===========================
-
-    /**
-     * Handle filter button clicks
-     */
-    handleFilter(e) {
-        const filter = e.target.dataset.filter;
-        this.currentFilter = filter;
-
-        // Update button states
-        this.filterButtons.forEach((btn) => {
-            const isActive = btn.dataset.filter === filter;
-            btn.classList.toggle('active', isActive);
-            btn.setAttribute('aria-pressed', isActive);
-        });
-
-        this.render();
-    }
-
-    /**
-     * Get filtered tasks
-     */
-    getFilteredTasks() {
-        const searchTerm = (this.searchInput && this.searchInput.value.trim().toLowerCase()) || '';
-        let list = [];
-        switch (this.currentFilter) {
-            case 'completed':
-                list = this.tasks.filter((t) => t.completed);
-                break;
-            case 'active':
-                list = this.tasks.filter((t) => !t.completed);
-                break;
-            case 'all':
-            default:
-                list = this.tasks.slice();
-                break;
-        }
-
-        if (searchTerm) {
-            list = list.filter((t) => t.text.toLowerCase().includes(searchTerm));
-        }
-
-        return list;
-    }
-
-    // ===========================
-    // Rendering
-    // ===========================
-
-    /**
-     * Render the entire UI
-     */
-    render() {
-        this.renderTasks();
-        this.updateStats();
-        this.updateClearButton();
-    }
-
-    /**
-     * Render task list
-     */
-    renderTasks() {
-        const filteredTasks = this.getFilteredTasks();
-
-        // Clear the list
-        this.taskList.innerHTML = '';
-
-        // Show empty state
-        if (this.tasks.length === 0) {
-            this.emptyState.style.display = 'block';
-            return;
-        }
-
-        this.emptyState.style.display = 'none';
-
-        // Show filtered empty state
-        if (filteredTasks.length === 0) {
-            const message =
-                this.currentFilter === 'completed'
-                    ? 'No completed tasks yet'
-                    : 'No pending tasks. Great job!';
-            const emptyFiltered = document.createElement('div');
-            emptyFiltered.className = 'empty-state';
-            emptyFiltered.style.marginTop = '2rem';
-            emptyFiltered.innerHTML = `<p>${message}</p>`;
-            this.taskList.appendChild(emptyFiltered);
-            return;
-        }
-
-        // Render each task
-        filteredTasks.forEach((task) => {
-            const taskElement = this.createTaskElement(task);
-            this.taskList.appendChild(taskElement);
-        });
-    }
-
-    /**
-     * Create a task element
-     */
-    createTaskElement(task) {
-        const li = document.createElement('li');
-        li.className = `task-item${task.completed ? ' completed' : ''}`;
-        li.setAttribute('role', 'listitem');
-
-        // Format date
-        const date = new Date(task.createdAt);
-        const timeString = date.toLocaleString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-
-        const badgeClass = task.priority === 'high' ? 'badge-high' : task.priority === 'low' ? 'badge-low' : 'badge-medium';
-        li.innerHTML = `
-            <input
-                type="checkbox"
-                class="task-checkbox"
-                ${task.completed ? 'checked' : ''}
-                aria-label="Mark task as ${task.completed ? 'incomplete' : 'complete'}: ${task.text}"
-                data-id="${task.id}"
-            >
-            <div class="task-content">
-                <span class="badge ${badgeClass}">${task.priority}</span>
-                <span class="task-text">${this.escapeHtml(task.text)}</span>
-                <span class="task-time">${timeString}</span>
-            </div>
-            <div class="task-actions">
-                <button class="btn-edit" data-action="edit" data-id="${task.id}" aria-label="Edit task: ${task.text}">Edit</button>
-                <button class="btn btn-danger" data-action="delete" data-id="${task.id}" aria-label="Delete task: ${task.text}">Delete</button>
-            </div>
-        `;
-
-        return li;
-    }
-
-    // Handle click events inside the task list (delegation)
-    handleListClick(e) {
-        const actionBtn = e.target.closest('[data-action]');
-        if (!actionBtn) return;
-        const action = actionBtn.dataset.action;
-        const id = parseInt(actionBtn.dataset.id, 10);
-        if (action === 'delete') this.deleteTask(id);
-        if (action === 'edit') this.startEditTask(id, actionBtn);
-    }
-
-    // Handle change events inside task list (e.g., checkbox)
-    handleListChange(e) {
-        const checkbox = e.target.closest('.task-checkbox');
-        if (!checkbox) return;
-        const id = parseInt(checkbox.dataset.id, 10);
-        this.toggleTask(id);
-    }
-
-    // Start inline editing of a task
-    startEditTask(id, buttonEl) {
-        const li = buttonEl.closest('.task-item');
-        if (!li) return;
-        const task = this.tasks.find((t) => t.id === id);
-        if (!task) return;
-
-        const content = li.querySelector('.task-content');
-        content.innerHTML = `
-            <input class="edit-input" type="text" value="${this.escapeHtml(task.text)}" aria-label="Edit task text">
-            <select class="priority-select edit-priority">
-                <option value="high" ${task.priority==='high'?'selected':''}>High</option>
-                <option value="medium" ${task.priority==='medium'?'selected':''}>Medium</option>
-                <option value="low" ${task.priority==='low'?'selected':''}>Low</option>
-            </select>
-        `;
-
-        const saveBtn = document.createElement('button');
-        saveBtn.textContent = 'Save';
-        saveBtn.className = 'btn btn-primary';
-        saveBtn.addEventListener('click', () => {
-            const newText = li.querySelector('.edit-input').value.trim();
-            const newPriority = li.querySelector('.edit-priority').value;
-            if (!newText) return this.showError('Task text cannot be empty');
-            task.text = newText;
-            task.priority = newPriority;
-            this.saveTasks();
-            this.render();
-        });
-
-        const cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.className = 'btn btn-secondary';
-        cancelBtn.style.marginLeft = '0.5rem';
-        cancelBtn.addEventListener('click', () => this.render());
-
-        const actions = li.querySelector('.task-actions');
-        actions.innerHTML = '';
-        actions.appendChild(saveBtn);
-        actions.appendChild(cancelBtn);
-    }
-
-    /**
-     * Update statistics
-     */
-    updateStats() {
-        const total = this.tasks.length;
-        const completed = this.tasks.filter((t) => t.completed).length;
-        const pending = total - completed;
-
-        this.totalCount.textContent = total;
-        this.completedCount.textContent = completed;
-        this.pendingCount.textContent = pending;
-    }
-
-    /**
-     * Update clear button visibility
-     */
-    updateClearButton() {
-        const hasCompleted = this.tasks.some((t) => t.completed);
-        this.clearCompletedBtn.style.display = hasCompleted ? 'block' : 'none';
-    }
-
-    // ===========================
-    // Storage
-    // ===========================
-
-    /**
-     * Save tasks to localStorage
-     */
-    saveTasks() {
-        try {
-            localStorage.setItem('tasks', JSON.stringify(this.tasks));
-        } catch (error) {
-            console.error('Failed to save tasks:', error);
-        }
-    }
-
-    /**
-     * Load tasks from localStorage
-     */
-    loadTasks() {
-        try {
-            const stored = localStorage.getItem('tasks');
-            return stored ? JSON.parse(stored) : [];
-        } catch (error) {
-            console.error('Failed to load tasks:', error);
-            return [];
-        }
-    }
-
-    // ===========================
-    // Utilities
-    // ===========================
-
-    /**
-     * Escape HTML to prevent XSS
-     */
-    escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    /**
-     * Show form error message
-     */
-    showError(message) {
-        this.formError.textContent = message;
-        this.input.setAttribute('aria-invalid', 'true');
-    }
-
-    /**
-     * Clear form error message
-     */
-    clearError() {
-        this.formError.textContent = '';
-        this.input.setAttribute('aria-invalid', 'false');
-    }
-
-    /**
-     * Announce messages to screen readers
-     */
-    announceToScreenReader(message) {
-        const announcement = document.createElement('div');
-        announcement.setAttribute('role', 'status');
-        announcement.setAttribute('aria-live', 'polite');
-        announcement.className = 'sr-only';
-        announcement.textContent = message;
-        document.body.appendChild(announcement);
-
-        // Remove after announcement
-        setTimeout(() => {
-            announcement.remove();
-        }, 1000);
-    }
-
-    // ===========================
-    // Dark Mode
-    // ===========================
-
-    /**
-     * Initialize dark mode based on saved preference or system preference
-     */
-    initializeDarkMode() {
-        const savedDarkMode = this.loadDarkModePreference();
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const isDarkMode = savedDarkMode !== null ? savedDarkMode : prefersDark;
-
-        if (isDarkMode) {
-            this.enableDarkMode();
-        }
-    }
-
-    /**
-     * Toggle dark mode
-     */
-    toggleDarkMode() {
-        const isDarkMode = document.body.classList.contains('dark-mode');
-
-        if (isDarkMode) {
-            this.disableDarkMode();
-        } else {
-            this.enableDarkMode();
-        }
-    }
-
-    /**
-     * Enable dark mode
-     */
-    enableDarkMode() {
-        document.body.classList.add('dark-mode');
-        this.darkModeToggle.setAttribute('aria-pressed', 'true');
-        this.saveDarkModePreference(true);
-        this.announceToScreenReader('Dark mode enabled');
-    }
-
-    /**
-     * Disable dark mode
-     */
-    disableDarkMode() {
-        document.body.classList.remove('dark-mode');
-        this.darkModeToggle.setAttribute('aria-pressed', 'false');
-        this.saveDarkModePreference(false);
-        this.announceToScreenReader('Dark mode disabled');
-    }
-
-    /**
-     * Save dark mode preference to localStorage
-     */
-    saveDarkModePreference(isDarkMode) {
-        try {
-            localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
-        } catch (error) {
-            console.error('Failed to save dark mode preference:', error);
-        }
-    }
-
-    /**
-     * Load dark mode preference from localStorage
-     */
-    loadDarkModePreference() {
-        try {
-            const saved = localStorage.getItem('darkMode');
-            return saved !== null ? JSON.parse(saved) : null;
-        } catch (error) {
-            console.error('Failed to load dark mode preference:', error);
-            return null;
-        }
-    }
+    this.emptyState.style.display = 'none';
+
+    toShow.forEach(task => {
+      const col = document.createElement('div');
+      col.className = 'col-12 col-md-6 col-lg-4 d-flex';
+
+      const card = document.createElement('div');
+      card.className = 'card task-card flex-fill';
+
+      const body = document.createElement('div');
+      body.className = 'card-body d-flex flex-column';
+
+      // Title row
+      const titleRow = document.createElement('div');
+      titleRow.className = 'd-flex justify-content-between align-items-start mb-2 gap-2';
+
+      const left = document.createElement('div');
+      left.className = 'd-flex align-items-start gap-2';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'form-check-input me-2 mt-1';
+      checkbox.checked = !!task.completed;
+      checkbox.setAttribute('aria-label', `Mark task ${task.title} as ${task.completed? 'incomplete':'complete'}`);
+      checkbox.addEventListener('change', () => this.toggleComplete(task.id));
+
+      const title = document.createElement('h5');
+      title.className = 'card-title mb-0 text-break-words';
+      title.innerHTML = this.escape(task.title);
+
+      left.appendChild(checkbox);
+      left.appendChild(title);
+
+      const badge = document.createElement('span');
+      badge.className = `badge badge-priority ms-2 ${'badge-'+task.priority}`;
+      badge.textContent = task.priority;
+
+      titleRow.appendChild(left);
+      titleRow.appendChild(badge);
+
+      // Description
+      const desc = document.createElement('p');
+      desc.className = 'card-text mb-2 text-break-words';
+      desc.innerHTML = task.description ? this.escape(task.description) : '';
+
+      // Meta row
+      const meta = document.createElement('div');
+      meta.className = 'd-flex justify-content-between align-items-center task-meta mt-auto';
+
+      const leftMeta = document.createElement('div');
+      leftMeta.innerHTML = `<div>${this.escape(task.category||'General')}</div><div>${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : ''}</div>`;
+
+      const actions = document.createElement('div');
+      actions.className = 'btn-group';
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn btn-sm btn-outline-primary';
+      editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
+      editBtn.title = 'Edit';
+      editBtn.addEventListener('click', () => this.openEditModal(task.id));
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-sm btn-outline-danger';
+      delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      delBtn.title = 'Delete';
+      delBtn.addEventListener('click', () => this.deleteTask(task.id));
+
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+
+      meta.appendChild(leftMeta);
+      meta.appendChild(actions);
+
+      if (task.completed) {
+        title.classList.add('text-decoration-line-through','text-muted');
+        desc.classList.add('text-muted');
+      }
+
+      body.appendChild(titleRow);
+      if (task.description) body.appendChild(desc);
+      body.appendChild(meta);
+
+      card.appendChild(body);
+      col.appendChild(card);
+      this.tasksContainer.appendChild(col);
+    });
+  }
+
+  populateCategoryFilter() {
+    const categories = Array.from(new Set(this.tasks.map(t => t.category).filter(Boolean)));
+    const existing = Array.from(this.filterCategory.options).map(o=>o.value);
+    // Rebuild options keeping 'all' first
+    this.filterCategory.innerHTML = '<option value="all">All Categories</option>' + categories.map(c => `<option value="${this.escapeAttr(c)}">${this.escape(c)}</option>`).join('');
+  }
+
+  escape(str){ return String(str).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+  escapeAttr(str){ return String(str).replaceAll('"','&quot;').replaceAll("'","&#39;"); }
 }
 
-// ===========================
-// Initialize Application
-// ===========================
-
 document.addEventListener('DOMContentLoaded', () => {
-    new TaskManager();
+  window.app = new TaskManager();
 });
