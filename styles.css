@@ -46,7 +46,7 @@ body {
 .container {
     max-width: 900px;
     margin: 0 auto;
-    padding: var(--spacing-unit) * 4;
+    padding: calc(var(--spacing-unit) * 8);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -73,6 +73,14 @@ header {
     text-align: center;
 }
 
+/* make header background subtle */
+header {
+    background: linear-gradient(90deg, rgba(79,70,229,0.06), rgba(99,102,241,0.03));
+    padding: 1.25rem;
+    border-radius: 14px;
+    display: block;
+}
+
 @keyframes slideDown {
     from {
         opacity: 0;
@@ -97,6 +105,83 @@ header h1 {
     color: var(--text-secondary);
     font-weight: 500;
 }
+
+/* Form grid */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 140px 120px;
+    gap: 1rem;
+    align-items: center;
+}
+
+.priority-select {
+    padding: 0.6rem 0.75rem;
+    border-radius: 8px;
+    border: 2px solid var(--border-color);
+    background: transparent;
+    font-weight: 600;
+}
+
+.btn-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Controls row including search and filters */
+.controls-row {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    border: 2px solid var(--border-color);
+    background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.4));
+    box-shadow: var(--shadow-sm);
+}
+
+/* Priority badges */
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.badge-high { background: linear-gradient(90deg,#ff7a7a,#ff4d4d); color: white; }
+.badge-medium { background: linear-gradient(90deg,#ffd37a,#ffb84d); color: #1e293b; }
+.badge-low { background: linear-gradient(90deg,#9be7b5,#6ddf9b); color: #064e3b; }
+
+/* Task item improvements */
+.task-item {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    background-color: var(--card-bg);
+    border: 1px solid rgba(0,0,0,0.04);
+    border-radius: 12px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.task-item:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+
+.task-content { display: flex; gap: 0.5rem; align-items: center; }
+
+.task-text { font-weight: 600; }
+
+.task-actions { display:flex; gap:0.5rem; align-items:center }
+
+.btn-edit { background: transparent; color: var(--primary-color); border: none; font-weight:700; }
+
+.edit-input { padding:0.4rem 0.6rem; border-radius:8px; border:1px solid var(--border-color); }
 
 /* ===========================
    Dark Mode Toggle

@@ -45,7 +45,8 @@
             <section class="add-task-section" aria-labelledby="add-task-heading">
                 <h2 id="add-task-heading" class="sr-only">Add New Task</h2>
                 <form class="task-form" id="taskForm">
-                    <div class="form-group">
+                    <div class="form-grid">
+                        <label for="taskInput" class="sr-only">New task</label>
                         <input
                             type="text"
                             id="taskInput"
@@ -54,9 +55,17 @@
                             aria-label="Enter a new task"
                             required
                         >
+
+                        <label for="prioritySelect" class="sr-only">Priority</label>
+                        <select id="prioritySelect" class="priority-select" aria-label="Task priority">
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                            <option value="low">Low</option>
+                        </select>
+
                         <button
                             type="submit"
-                            class="btn btn-primary"
+                            class="btn btn-primary btn-add"
                             aria-label="Add the task to the list"
                         >
                             Add Task
@@ -88,8 +97,9 @@
             <!-- Task List -->
             <section class="task-list-section" aria-labelledby="task-list-heading">
                 <h2 id="task-list-heading">Tasks</h2>
-                
-                <div class="filter-buttons">
+                <div class="controls-row">
+                    <input id="searchInput" class="search-input" type="search" placeholder="Search tasks..." aria-label="Search tasks">
+                    <div class="filter-buttons">
                     <button
                         class="btn btn-filter active"
                         data-filter="all"

@@ -19,6 +19,8 @@ class TaskManager {
     initializeElements() {
         this.form = document.getElementById('taskForm');
         this.input = document.getElementById('taskInput');
+        this.prioritySelect = document.getElementById('prioritySelect');
+        this.searchInput = document.getElementById('searchInput');
         this.taskList = document.getElementById('taskList');
         this.emptyState = document.getElementById('emptyState');
         this.clearCompletedBtn = document.getElementById('clearCompletedBtn');
@@ -51,6 +53,15 @@ class TaskManager {
 
         // Dark mode toggle
         this.darkModeToggle.addEventListener('click', () => this.toggleDarkMode());
+
+        // Use event delegation for task list actions
+        this.taskList.addEventListener('click', (e) => this.handleListClick(e));
+        this.taskList.addEventListener('change', (e) => this.handleListChange(e));
+
+        // Search input
+        if (this.searchInput) {
+            this.searchInput.addEventListener('input', () => this.render());
+        }
     }
 
     // ===========================
@@ -63,6 +74,7 @@ class TaskManager {
     handleAddTask(e) {
         e.preventDefault();
         const taskText = this.input.value.trim();
+        const priority = this.prioritySelect ? this.prioritySelect.value : 'medium';
 
         // Validation
         if (!taskText) {
@@ -80,6 +92,7 @@ class TaskManager {
             id: Date.now(),
             text: taskText,
             completed: false,
+            priority: priority,
             createdAt: new Date(),
         };
 
@@ -154,15 +167,26 @@ class TaskManager {
      * Get filtered tasks
      */
     getFilteredTasks() {
+        const searchTerm = (this.searchInput && this.searchInput.value.trim().toLowerCase()) || '';
+        let list = [];
         switch (this.currentFilter) {
             case 'completed':
-                return this.tasks.filter((t) => t.completed);
+                list = this.tasks.filter((t) => t.completed);
+                break;
             case 'active':
-                return this.tasks.filter((t) => !t.completed);
+                list = this.tasks.filter((t) => !t.completed);
+                break;
             case 'all':
             default:
-                return this.tasks;
+                list = this.tasks.slice();
+                break;
         }
+
+        if (searchTerm) {
+            list = list.filter((t) => t.text.toLowerCase().includes(searchTerm));
+        }
+
+        return list;
     }
 
     // ===========================
@@ -233,6 +257,7 @@ class TaskManager {
             minute: '2-digit',
         });
 
+        const badgeClass = task.priority === 'high' ? 'badge-high' : task.priority === 'low' ? 'badge-low' : 'badge-medium';
         li.innerHTML = `
             <input
                 type="checkbox"
@@ -242,29 +267,77 @@ class TaskManager {
                 data-id="${task.id}"
             >
             <div class="task-content">
+                <span class="badge ${badgeClass}">${task.priority}</span>
                 <span class="task-text">${this.escapeHtml(task.text)}</span>
                 <span class="task-time">${timeString}</span>
             </div>
             <div class="task-actions">
-                <button
-                    class="btn btn-danger"
-                    aria-label="Delete task: ${task.text}"
-                    data-action="delete"
-                    data-id="${task.id}"
-                >
-                    Delete
-                </button>
+                <button class="btn-edit" data-action="edit" data-id="${task.id}" aria-label="Edit task: ${task.text}">Edit</button>
+                <button class="btn btn-danger" data-action="delete" data-id="${task.id}" aria-label="Delete task: ${task.text}">Delete</button>
             </div>
         `;
 
-        // Attach event listeners
-        const checkbox = li.querySelector('.task-checkbox');
-        const deleteBtn = li.querySelector('.btn-danger');
-
-        checkbox.addEventListener('change', () => this.toggleTask(task.id));
-        deleteBtn.addEventListener('click', () => this.deleteTask(task.id));
-
         return li;
+    }
+
+    // Handle click events inside the task list (delegation)
+    handleListClick(e) {
+        const actionBtn = e.target.closest('[data-action]');
+        if (!actionBtn) return;
+        const action = actionBtn.dataset.action;
+        const id = parseInt(actionBtn.dataset.id, 10);
+        if (action === 'delete') this.deleteTask(id);
+        if (action === 'edit') this.startEditTask(id, actionBtn);
+    }
+
+    // Handle change events inside task list (e.g., checkbox)
+    handleListChange(e) {
+        const checkbox = e.target.closest('.task-checkbox');
+        if (!checkbox) return;
+        const id = parseInt(checkbox.dataset.id, 10);
+        this.toggleTask(id);
+    }
+
+    // Start inline editing of a task
+    startEditTask(id, buttonEl) {
+        const li = buttonEl.closest('.task-item');
+        if (!li) return;
+        const task = this.tasks.find((t) => t.id === id);
+        if (!task) return;
+
+        const content = li.querySelector('.task-content');
+        content.innerHTML = `
+            <input class="edit-input" type="text" value="${this.escapeHtml(task.text)}" aria-label="Edit task text">
+            <select class="priority-select edit-priority">
+                <option value="high" ${task.priority==='high'?'selected':''}>High</option>
+                <option value="medium" ${task.priority==='medium'?'selected':''}>Medium</option>
+                <option value="low" ${task.priority==='low'?'selected':''}>Low</option>
+            </select>
+        `;
+
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save';
+        saveBtn.className = 'btn btn-primary';
+        saveBtn.addEventListener('click', () => {
+            const newText = li.querySelector('.edit-input').value.trim();
+            const newPriority = li.querySelector('.edit-priority').value;
+            if (!newText) return this.showError('Task text cannot be empty');
+            task.text = newText;
+            task.priority = newPriority;
+            this.saveTasks();
+            this.render();
+        });
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.className = 'btn btn-secondary';
+        cancelBtn.style.marginLeft = '0.5rem';
+        cancelBtn.addEventListener('click', () => this.render());
+
+        const actions = li.querySelector('.task-actions');
+        actions.innerHTML = '';
+        actions.appendChild(saveBtn);
+        actions.appendChild(cancelBtn);
     }
 
     /**
